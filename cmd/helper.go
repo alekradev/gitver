@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/viper"
-	"gotver/internal/gitops"
-	"gotver/internal/version"
+	"gitver/internal/gitops"
+	"gitver/internal/version"
 	"log"
 )
 
@@ -14,14 +14,14 @@ func loadConfig() {
 		log.Fatal(err)
 	}
 
-	if err := version.ReadVersion(); err != nil {
+	if err := version.ReadFile(); err != nil {
 		log.Fatal(err)
 	}
 	prints("load configuration success")
 }
 
 func prepareGitOperation() error {
-	prints("perpare git operations")
+	prints("prepare git operations")
 	if err := gitops.ReadRepository(); err != nil {
 		return fmt.Errorf("git repository is not initialized: %w", err)
 	}

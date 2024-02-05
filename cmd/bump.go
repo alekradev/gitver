@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
-	"gotver/internal/constants"
-	"gotver/internal/gitops"
-	"gotver/internal/version"
+	"gitver/internal/constants"
+	"gitver/internal/gitops"
+	"gitver/internal/version"
 	"log"
 	"strings"
 )
@@ -19,8 +19,7 @@ var (
 	commitFlag bool
 	gitFlag    string
 	amend      bool
-
-	verbose bool
+	verbose    bool
 )
 
 const (
@@ -37,7 +36,7 @@ const (
 
 const (
 	message0001 = "Please provide a valid flag: --auto, --commit, --major, --minor, or --patch"
-	message0002 = "Version bumped: %v -> %v"
+	message0002 = "data bumped: %v -> %v"
 )
 
 // bumpCmd represents the bump command
@@ -45,38 +44,7 @@ var bumpCmd = &cobra.Command{
 	Use:   "bump",
 	Short: "Bump the version of the project",
 	Long:  "Bump the version of the project based on the provided flags: --auto, --commit, --major, --minor, or --patch.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if !validateMode(majorFlag, minorFlag, patchFlag, autoFlag, commitFlag) {
-			log.Fatalf(message0001)
-		}
-
-		loadConfig()
-
-		if gitFlag == CommitTag || gitFlag == CommitTagPush || autoFlag {
-			err := prepareGitOperation()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-		}
-
-		switch {
-		case majorFlag:
-			executeMajorMode()
-		case minorFlag:
-			executeMinorMode()
-		case patchFlag:
-			executePatchMode()
-		case autoFlag:
-			executeAutoMode()
-		case commitFlag:
-			executeCommitMode()
-		}
-
-		executeGitOperations()
-
-		log.Printf(message0002, version.GetLastVersion(), version.ToString())
-	},
+	Run:   executeBumpCmd,
 }
 
 func init() {
@@ -88,7 +56,40 @@ func init() {
 	bumpCmd.Flags().BoolVar(&patchFlag, "patch", false, "Bump the patch version")
 	bumpCmd.Flags().BoolVar(&verbose, "verbose", false, "Bump the patch version")
 	bumpCmd.Flags().BoolVar(&amend, "amend", false, "Bump the patch version")
-	bumpCmd.Flags().StringVar(&gitFlag, "git", "", "Auto Commit Bump version changes. Valid Values are COMMIT_TAG COMMIT_TAG_PUSH")
+	bumpCmd.Flags().StringVar(&gitFlag, "git", "", "Auto commit Bump version changes. Valid Values are COMMIT_TAG COMMIT_TAG_PUSH")
+}
+
+func executeBumpCmd(cmd *cobra.Command, args []string) {
+	if !validateMode(majorFlag, minorFlag, patchFlag, autoFlag, commitFlag) {
+		log.Fatalf(message0001)
+	}
+
+	loadConfig()
+
+	if gitFlag == CommitTag || gitFlag == CommitTagPush || autoFlag {
+		err := prepareGitOperation()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
+
+	switch {
+	case majorFlag:
+		executeMajorMode()
+	case minorFlag:
+		executeMinorMode()
+	case patchFlag:
+		executePatchMode()
+	case autoFlag:
+		executeAutoMode()
+	case commitFlag:
+		executeCommitMode()
+	}
+
+	executeGitOperations()
+
+	log.Printf(message0002, version.GetLastVersion(), version.GetVersion())
 }
 
 func validateMode(values ...bool) bool {
@@ -161,9 +162,9 @@ func detectAutoBump() (func() error, error) {
 		return nil, err
 	}
 
-	if tag == fmt.Sprintf(constants.ReleaseTag, version.ToString()) {
+	if tag == fmt.Sprintf(constants.ReleaseTag, version.GetVersion()) {
 		return analyzeCommits(tag)
-	} else if tag == fmt.Sprintf(constants.VersionTag, version.ToString()) {
+	} else if tag == fmt.Sprintf(constants.VersionTag, version.GetVersion()) {
 		return analyzeAndCompareCommits(tag, fmt.Sprintf(constants.ReleaseTag, version.GetLastVersion()))
 	} else if tag == "" {
 		return analyzeCommits(tag)
@@ -253,15 +254,15 @@ func detectCommitBump() (func() error, error) {
 func executeGitOperations() {
 	if gitFlag == CommitTag || gitFlag == CommitTagPush {
 
-		if _, err := gitops.Add(); err != nil {
+		if _, err := gitops.AddAll(); err != nil {
 			log.Fatal(err)
 		}
 
-		if err := gitops.Commit(fmt.Sprintf(constants.CommitMessage, version.GetLastVersion(), version.ToString()), amend); err != nil {
+		if err := gitops.Commit(fmt.Sprintf(constants.CommitMessage, version.GetLastVersion(), version.GetVersion()), amend); err != nil {
 			log.Fatal(err)
 		}
 
-		if err := gitops.CreateTag(fmt.Sprintf(constants.VersionTag, version.ToString()), constants.TagMessage); err != nil {
+		if err := gitops.CreateTag(fmt.Sprintf(constants.VersionTag, version.GetVersion()), constants.TagMessage); err != nil {
 			log.Fatal(err)
 		}
 	}

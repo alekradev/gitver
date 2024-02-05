@@ -6,7 +6,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gotver/internal/version"
+	"gitver/internal/version"
 	"log"
 )
 
@@ -24,26 +24,7 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		err := version.FromString(versionFlag)
-		if err != nil {
-			log.Fatalf(err.Error())
-		}
-
-		err = version.SafeWriteVersion()
-		if err != nil {
-			log.Fatalf(err.Error())
-			return
-		}
-
-		err = viper.SafeWriteConfig()
-		if err != nil {
-			log.Fatalf(err.Error())
-			return
-		}
-
-		log.Println("Gotver initialized for the project.")
-	},
+	Run: executeInitCmd,
 }
 
 func init() {
@@ -59,4 +40,25 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// initCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func executeInitCmd(cmd *cobra.Command, args []string) {
+	err := version.SetDefaultVersion(versionFlag)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	err = version.SafeWriteFile()
+	if err != nil {
+		log.Fatalf(err.Error())
+		return
+	}
+
+	err = viper.SafeWriteConfig()
+	if err != nil {
+		log.Fatalf(err.Error())
+		return
+	}
+
+	log.Println("Gitver initialized for the project.")
 }

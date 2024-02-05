@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"github.com/spf13/viper"
-	"gotver/internal/constants"
-	"gotver/internal/gitops"
-	"gotver/internal/version"
+	"gitver/internal/constants"
+	"gitver/internal/filesystem"
+	"gitver/internal/gitops"
+	"gitver/internal/version"
 	"log"
 	"os"
 
@@ -42,7 +43,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 
-	projectDir, err := version.GetProjectDirectory()
+	projectDir, err := filesystem.New().Find(constants.ConfigFolderName)
 	if err != nil {
 		projectDir, err = os.Getwd()
 		if err != nil {
@@ -53,7 +54,7 @@ func init() {
 	viper.SetConfigName(constants.ConfigName)
 	viper.SetConfigType(constants.ConfigType)
 	viper.AddConfigPath(projectDir + "/" + constants.ConfigFolderName)
-	viper.SetDefault("Version", "0.0.0")
+	viper.SetDefault("data", "0.0.0")
 
 	version.SetFilePath(projectDir + "/" + constants.ConfigFolderName)
 	version.SetFileName(constants.VersionFileName)

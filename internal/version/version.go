@@ -3,239 +3,220 @@ package version
 import (
 	"fmt"
 	"github.com/spf13/afero"
-	"gotver/internal/constants"
-	"io"
+	"gopkg.in/yaml.v2"
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-var v *Version
+var v *Data
 
-type Version struct {
-	major               int
-	minor               int
-	patch               int
-	versionFilePath     string
-	versionFileName     string
-	lastVersionFileName string
-	lastVersion         string
-	fs                  afero.Fs
+type Data struct {
+	Version           string         `yaml:"Version"`
+	History           []HistoryEntry `yaml:"History"`
+	filepath          string
+	filename          string
+	fs                afero.Fs
+	configPermissions os.FileMode
 }
 
+type HistoryEntry struct {
+	Version Version `yaml:"Version"`
+	Date    string  `yaml:"Date"`
+}
+
+type Version struct {
+	Major int `yaml:"Major"`
+	Minor int `yaml:"Minor"`
+	Patch int `yaml:"Patch"`
+}
+
+// Private Functions
 func init() {
 	v = New()
 }
 
-func New() *Version {
-	v := new(Version)
-	v.major = 0
-	v.minor = 0
-	v.patch = 0
-	v.versionFilePath = ""
-	v.versionFileName = ""
-	v.lastVersionFileName = ".lastversion"
-	v.lastVersion = "0.0.0"
-	v.fs = afero.NewOsFs()
-	return v
+func (v *Version) copy() Version {
+	result := Version{}
+	result.Major = v.Major
+	result.Minor = v.Minor
+	result.Patch = v.Patch
+	return result
 }
 
-// GetProjectDirectory returns the directory containing the .gotver folder.
-func GetProjectDirectory() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", UnhandledError(err.Error())
-	}
-
-	for {
-		// Überprüfen Sie, ob das aktuelle Verzeichnis `.gotver` enthält.
-		if _, err := os.Stat(filepath.Join(dir, constants.ConfigFolderName)); !os.IsNotExist(err) {
-			return filepath.Clean(dir), nil
-		}
-
-		// Erhalten Sie das übergeordnete Verzeichnis.
-		parentDir := filepath.Dir(dir)
-
-		// Wenn das aktuelle Verzeichnis gleich dem übergeordneten Verzeichnis ist,
-		// dann haben wir das Wurzelverzeichnis erreicht.
-		if parentDir == dir {
-			break
-		}
-
-		dir = parentDir
-	}
-
-	return "", ProjectDirectoryNotFoundError(dir)
+func (v *Version) toString() string {
+	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
+func (d *Data) readFile() error {
+	path := filepath.Join(d.filepath, d.filename)
 
-func ReadVersion() error {
-	return v.ReadVersion()
-}
-
-func (v *Version) ReadVersion() error {
-	versionFilePath := filepath.Join(v.versionFilePath, v.versionFileName)
-	lastVersionFilePath := filepath.Join(v.versionFilePath, v.lastVersionFileName)
-
-	data, err := os.ReadFile(versionFilePath)
+	data, err := afero.ReadFile(d.fs, path)
 	if err != nil {
-		return FileNotFoundError(versionFilePath)
+		return FileNotFoundError(path)
 	}
 
-	_, err = fmt.Sscanf(string(data), "%d.%d.%d", &v.major, &v.minor, &v.patch)
+	err = yaml.Unmarshal(data, d)
 	if err != nil {
-		return FileFormatError(versionFilePath)
-	}
-
-	if _, err := os.Stat(lastVersionFilePath); os.IsNotExist(err) {
-		return nil
-	}
-
-	data, err = os.ReadFile(lastVersionFilePath)
-	if err != nil {
-		return FileNotFoundError(lastVersionFilePath)
-	}
-
-	_, err = fmt.Sscan(string(data), &v.lastVersion)
-	if err != nil {
-		return FileFormatError(versionFilePath)
+		return FileFormatError(path)
 	}
 
 	return nil
 }
-
-func SetFilePath(filePath string) {
-	v.SetFilePath(filePath)
+func (d *Data) setFilePath(filepath string) {
+	d.filepath = filepath
 }
-
-func (v *Version) SetFilePath(filePath string) {
-	v.versionFilePath = filePath
+func (d *Data) setFileName(filename string) {
+	d.filename = filename
 }
-
-func SetFileName(fileName string) {
-	v.SetFileName(fileName)
-}
-
-func (v *Version) SetFileName(fileName string) {
-	v.versionFileName = fileName
-}
-
-func SafeWriteVersion() error {
-	return v.SafeWriteVersion()
-}
-func (v *Version) SafeWriteVersion() error {
-	dir := filepath.Join(v.versionFilePath)
-	versionFilePath := filepath.Join(v.versionFilePath, v.versionFileName)
-
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err := os.Mkdir(dir, os.ModePerm)
-		if err != nil {
-			return err
-		}
-	}
-
-	alreadyExists, err := afero.Exists(v.fs, versionFilePath)
+func (d *Data) safeWriteFile() error {
+	path := filepath.Join(d.filepath, d.filename)
+	alreadyExists, err := afero.Exists(v.fs, path)
 	if alreadyExists && err == nil {
-		return FileAlreadyExistsError(versionFilePath)
+		return FileAlreadyExistsError(path)
 	}
 
-	if err := v.WriteVersion(); err != nil {
+	if err := d.writeFile(); err != nil {
 		return err
 	}
 
 	return nil
 }
+func (d *Data) writeFile() error {
+	path := filepath.Join(d.filepath, d.filename)
 
-func ToString() string {
-	return v.ToString()
-}
-func (v *Version) ToString() string {
-	return fmt.Sprintf("%d.%d.%d", v.major, v.minor, v.patch)
-}
-
-func GetLastVersion() string {
-	return v.GetLastVersion()
-}
-func (v *Version) GetLastVersion() string {
-	return v.lastVersion
-}
-
-func FromString(version string) error {
-	return v.FromString(version)
-}
-func (v *Version) FromString(version string) error {
-	_, err := fmt.Sscanf(version, "%d.%d.%d", &v.major, &v.minor, &v.patch)
+	data, err := yaml.Marshal(d)
 	if err != nil {
-		return InputValueError(version)
-	}
-	return nil
-}
-
-func WriteVersion() error {
-	return v.WriteVersion()
-}
-
-func (v *Version) WriteVersion() error {
-	versionFilePath := filepath.Join(v.versionFilePath, v.versionFileName)
-	lastVersionFilePath := filepath.Join(v.versionFilePath, v.lastVersionFileName)
-
-	if _, err := os.Stat(versionFilePath); !os.IsNotExist(err) {
-		source, err := os.Open(versionFilePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer source.Close()
-
-		// Zieldatei erstellen
-		destination, err := os.Create(lastVersionFilePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer destination.Close()
-
-		// Inhalt kopieren
-		_, err = io.Copy(destination, source)
-		if err != nil {
-			log.Fatal(err)
-		}
+		log.Fatalf("Fehler beim Konvertieren in YAML: %d", err)
+		return err
 	}
 
-	err := os.WriteFile(versionFilePath, []byte(v.ToString()), os.ModePerm)
+	flags := os.O_CREATE | os.O_TRUNC | os.O_WRONLY
+
+	f, err := d.fs.OpenFile(path, flags, d.configPermissions)
 	if err != nil {
-		return WriteOperationFailedError{versionFilePath, err}
+		return err
+	}
+	defer f.Close()
+
+	err = afero.WriteFile(v.fs, path, data, os.ModePerm)
+	if err != nil {
+		return WriteOperationFailedError{path, err}
 	}
 
 	return nil
 }
+func (d *Data) bumpMajor() error {
+	if len(d.History) == 0 {
 
+	}
+
+	version := d.History[len(d.History)-1].Version.copy()
+	version.Major++
+	version.Minor = 0
+	version.Patch = 0
+	entry := HistoryEntry{
+		Version: version,
+		Date:    time.Now().Format("YYYY-MM-DD"),
+	}
+	d.History = append(d.History, entry)
+
+	return d.writeFile()
+}
+func (d *Data) bumpMinor() error {
+	if len(d.History) == 0 {
+
+	}
+
+	version := d.History[len(d.History)-1].Version.copy()
+	version.Minor++
+	version.Patch = 0
+	entry := HistoryEntry{
+		Version: version,
+		Date:    time.Now().Format("YYYY-MM-DD"),
+	}
+	d.History = append(d.History, entry)
+
+	return d.writeFile()
+}
+func (d *Data) bumpPatch() error {
+	if len(d.History) == 0 {
+
+	}
+
+	version := d.History[len(d.History)-1].Version.copy()
+	version.Patch++
+	entry := HistoryEntry{
+		Version: version,
+		Date:    time.Now().Format("YYYY-MM-DD"),
+	}
+	d.History = append(d.History, entry)
+
+	return d.writeFile()
+}
+func (d *Data) setFileSystem(fs afero.Fs) {
+	d.fs = fs
+}
+func (d *Data) getVersion() string {
+	return d.History[len(d.History)-1].Version.toString()
+}
+func (d *Data) getLastVersion() string {
+	return d.History[len(d.History)-2].Version.toString()
+}
+func (d *Data) setDefaultVersion(version string) error {
+	_, err := fmt.Sscanf(version, "%d.%d.%d", &d.History[0].Version.Major, &d.History[0].Version.Minor, &d.History[0].Version.Patch)
+	return err
+}
+
+// Public Functions
+
+func New() *Data {
+	v := new(Data)
+	v.Version = "2024-02-04"
+	v.History = []HistoryEntry{
+		{
+			Version: Version{
+				Major: 0,
+				Minor: 0,
+				Patch: 0,
+			},
+			Date: time.Now().Format("YYYY-MM-DD"),
+		},
+	}
+	v.configPermissions = os.FileMode(0o644)
+	v.fs = afero.NewOsFs()
+	return v
+}
+func ReadFile() error {
+	return v.readFile()
+}
+func SetFilePath(filePath string) {
+	v.setFilePath(filePath)
+}
+func SetFileName(fileName string) {
+	v.setFileName(fileName)
+}
+func SetFileSystem(fs afero.Fs) {
+	v.setFileSystem(fs)
+}
+func SafeWriteFile() error {
+	return v.safeWriteFile()
+}
 func BumpMajor() error {
-	return v.BumpMajor()
+	return v.bumpMajor()
 }
-func (v *Version) BumpMajor() error {
-	v.lastVersion = v.ToString()
-	v.major++
-	v.minor = 0
-	v.patch = 0
-
-	return v.WriteVersion()
-}
-
 func BumpMinor() error {
-	return v.BumpMinor()
+	return v.bumpMinor()
 }
-func (v *Version) BumpMinor() error {
-	v.lastVersion = v.ToString()
-	v.minor++
-	v.patch = 0
-
-	return v.WriteVersion()
-}
-
 func BumpPatch() error {
-	return v.BumpPatch()
+	return v.bumpPatch()
 }
-func (v *Version) BumpPatch() error {
-	v.lastVersion = v.ToString()
-	v.patch++
-
-	return v.WriteVersion()
+func GetVersion() string {
+	return v.getVersion()
+}
+func GetLastVersion() string {
+	return v.getLastVersion()
+}
+func SetDefaultVersion(version string) error {
+	return v.setDefaultVersion(version)
 }
