@@ -11,11 +11,40 @@ import (
 	"time"
 )
 
+type IGitOps interface {
+	SetRepositoryPath(path string)
+	SetObject(object Object)
+	SetWorktree(w *git.Worktree)
+	SetRepository(r *git.Repository)
+	ReadRepository() error
+	GetStatus() (git.Status, error)
+	IsCleanRepo() (bool, error)
+	AddAll() (plumbing.Hash, error)
+	Commit(message string, amend bool) error
+	CreateTag(tag string, message string) error
+	GetLatestTag() (string, error)
+	Push() error
+	GetHeadCommit() (*object.Commit, error)
+	GetTag(tag string) (plumbing.Hash, error)
+	GetCommitsBetweenTags(startTag, endTag string) ([]*object.Commit, error)
+
+	GetPath() string
+	GetName() string
+	GetEmail() string
+	GetRepository() *git.Repository
+	GetWorktree() *git.Worktree
+	GetObject() Object
+	GetCommitMessage() string
+	GetTagMessage() string
+}
+
 const (
 	EMPTY = ""
+	HEAD  = ""
+	INIT  = ""
 )
 
-var g *GitOps
+var g IGitOps
 
 type GitOps struct {
 	path          string
@@ -31,26 +60,26 @@ type GitOps struct {
 // Private Functions
 
 func init() {
-	g = New()
+	g = build()
 }
 
-func (g *GitOps) setRepositoryPath(path string) {
+func (g *GitOps) SetRepositoryPath(path string) {
 	g.path = path
 }
 
-func (g *GitOps) setObject(object Object) {
+func (g *GitOps) SetObject(object Object) {
 	g.object = object
 }
 
-func (g *GitOps) setWorktree(w *git.Worktree) {
+func (g *GitOps) SetWorktree(w *git.Worktree) {
 	g.worktree = w
 }
 
-func (g *GitOps) setRepository(r *git.Repository) {
+func (g *GitOps) SetRepository(r *git.Repository) {
 	g.repository = r
 }
 
-func (g *GitOps) readRepository() error {
+func (g *GitOps) ReadRepository() error {
 
 	r, err := g.object.Open(g.path)
 	if err != nil {
@@ -81,20 +110,20 @@ func (g *GitOps) readRepository() error {
 	return nil
 }
 
-func (g *GitOps) getStatus() (git.Status, error) {
+func (g *GitOps) GetStatus() (git.Status, error) {
 	return g.worktree.Status()
 }
-func (g *GitOps) isCleanRepo() (bool, error) {
-	status, err := g.getStatus()
+func (g *GitOps) IsCleanRepo() (bool, error) {
+	status, err := g.GetStatus()
 	if err != nil {
 		return false, err
 	}
 	return status.IsClean(), nil
 }
-func (g *GitOps) addAll() (plumbing.Hash, error) {
+func (g *GitOps) AddAll() (plumbing.Hash, error) {
 	return g.worktree.Add(".")
 }
-func (g *GitOps) commit(message string, amend bool) error {
+func (g *GitOps) Commit(message string, amend bool) error {
 	commitOptions := &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  g.name,
@@ -105,7 +134,7 @@ func (g *GitOps) commit(message string, amend bool) error {
 	}
 
 	if amend {
-		commit, err := g.getHeadCommit()
+		commit, err := g.GetHeadCommit()
 		if err != nil {
 			return err
 		}
@@ -119,7 +148,7 @@ func (g *GitOps) commit(message string, amend bool) error {
 	}
 	return nil
 }
-func (g *GitOps) createTag(tag string, message string) error {
+func (g *GitOps) CreateTag(tag string, message string) error {
 
 	headRef, err := g.repository.Head()
 	if err != nil {
@@ -146,7 +175,7 @@ func (g *GitOps) createTag(tag string, message string) error {
 
 	return nil
 }
-func (g *GitOps) getLatestTag() (string, error) {
+func (g *GitOps) GetLatestTag() (string, error) {
 
 	tagRefs, err := g.repository.Tags()
 	if err != nil {
@@ -161,7 +190,7 @@ func (g *GitOps) getLatestTag() (string, error) {
 	err = tagRefs.ForEach(func(t *plumbing.Reference) error {
 		obj, err := g.repository.TagObject(t.Hash())
 		if err != nil {
-			// Es könnte ein leichtes Tag sein, also versuchen Sie, den commit direkt zu bekommen
+			// Es könnte ein leichtes Tag sein, also versuchen Sie, den Commit direkt zu bekommen
 			commit, err := g.repository.CommitObject(t.Hash())
 			if err != nil {
 				return nil // Ignorieren von Fehlern, die durch leichte Tags verursacht werden
@@ -193,7 +222,7 @@ func (g *GitOps) getLatestTag() (string, error) {
 
 	return "", nil
 }
-func (g *GitOps) push() error {
+func (g *GitOps) Push() error {
 
 	// HEAD-Referenz holen
 	headRef, err := g.repository.Head()
@@ -217,7 +246,7 @@ func (g *GitOps) push() error {
 
 	return nil
 }
-func (g *GitOps) getHeadCommit() (*object.Commit, error) {
+func (g *GitOps) GetHeadCommit() (*object.Commit, error) {
 	headRef, err := g.repository.Head()
 	if err != nil {
 		return nil, err
@@ -230,7 +259,7 @@ func (g *GitOps) getHeadCommit() (*object.Commit, error) {
 
 	return commit, nil
 }
-func (g *GitOps) getTag(tag string) (plumbing.Hash, error) {
+func (g *GitOps) GetTag(tag string) (plumbing.Hash, error) {
 	tagRef, err := g.repository.Tag(tag)
 	if err == nil {
 		// Dereferenziert das Tag-Objekt, falls es ein annotiertes Tag ist
@@ -244,9 +273,9 @@ func (g *GitOps) getTag(tag string) (plumbing.Hash, error) {
 	}
 	return plumbing.Hash{}, nil
 }
-func (g *GitOps) getCommitsBetweenTags(startTag, endTag string) ([]*object.Commit, error) {
+func (g *GitOps) GetCommitsBetweenTags(startTag, endTag string) ([]*object.Commit, error) {
 
-	startHash, err := g.getTag(startTag)
+	startHash, err := g.GetTag(startTag)
 	if err != nil {
 		headRef, err := g.repository.Head()
 		if err != nil {
@@ -255,7 +284,7 @@ func (g *GitOps) getCommitsBetweenTags(startTag, endTag string) ([]*object.Commi
 		startHash = headRef.Hash()
 	}
 
-	endHash, _ := g.getTag(endTag)
+	endHash, _ := g.GetTag(endTag)
 	if err != nil {
 		endHash = plumbing.Hash{}
 	}
@@ -282,54 +311,39 @@ func (g *GitOps) getCommitsBetweenTags(startTag, endTag string) ([]*object.Commi
 	return commits, nil
 }
 
+func (g *GitOps) GetPath() string {
+	return g.path
+}
+func (g *GitOps) GetName() string {
+	return g.name
+}
+func (g *GitOps) GetEmail() string {
+	return g.email
+}
+func (g *GitOps) GetRepository() *git.Repository {
+	return g.repository
+}
+func (g *GitOps) GetWorktree() *git.Worktree {
+	return g.worktree
+}
+func (g *GitOps) GetObject() Object {
+	return g.object
+}
+func (g *GitOps) GetCommitMessage() string {
+	return g.commitMessage
+}
+func (g *GitOps) GetTagMessage() string {
+	return g.tagMessage
+}
+
 // Public Functions
 
-func New() *GitOps {
+func Get() IGitOps {
+	return g
+}
+func build() IGitOps {
 	g := new(GitOps)
 	g.commitMessage = constants.CommitMessage
 	g.tagMessage = constants.TagMessage
 	return g
-}
-func SetRepositoryPath(path string) {
-	g.setRepositoryPath(path)
-}
-func ReadRepository() error {
-	return g.readRepository()
-}
-func GetStatus() (git.Status, error) {
-	return g.getStatus()
-}
-func IsCleanRepo() (bool, error) {
-	return g.isCleanRepo()
-}
-func AddAll() (plumbing.Hash, error) {
-	return g.addAll()
-}
-func Commit(message string, amend bool) error {
-	return g.commit(message, amend)
-}
-func CreateTag(tag string, message string) error {
-	return g.createTag(tag, message)
-}
-func GetLastTag() (string, error) {
-	return g.getLatestTag()
-}
-func Push() error {
-	return g.push()
-}
-func GetHeadCommit() (*object.Commit, error) {
-	return g.getHeadCommit()
-}
-func GetCommits(tag string) ([]*object.Commit, error) {
-	return g.getCommitsBetweenTags(EMPTY, tag)
-}
-func GetTag(tag string) (plumbing.Hash, error) {
-	return g.getTag(tag)
-}
-func HasTag(tag string) bool {
-	hash, _ := g.getTag(tag)
-	return !hash.IsZero()
-}
-func GetCommitsBetweenTags(tagStart, tagEnd string) ([]*object.Commit, error) {
-	return g.getCommitsBetweenTags(tagStart, tagEnd)
 }

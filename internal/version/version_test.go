@@ -43,11 +43,13 @@ func AbsFilePath(t *testing.T, path string) string {
 }
 
 func TestNewData(t *testing.T) {
-	d := New()
+	d := build()
 	assert.NotNil(t, d)
-	assert.Equal(t, "2024-02-04", d.Version)
-	assert.Len(t, d.History, 1)
-	assert.Equal(t, 0, d.History[0].Version.Major)
+	assert.Equal(t, "2024-02-04", d.GetVersion())
+	assert.Len(t, d.GetHistory(), 1)
+	assert.Equal(t, 0, d.GetHistory()[0].GetVersion().GetMajor())
+	assert.Equal(t, 0, d.GetHistory()[0].GetVersion().GetMinor())
+	assert.Equal(t, 0, d.GetHistory()[0].GetVersion().GetPatch())
 	// Füge weitere Assertions hinzu, um die Initialwerte zu überprüfen
 }
 
@@ -63,23 +65,24 @@ func TestReadVersionSuccess(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
-
-	v = New()
-
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
-
-	err = v.readFile()
+	err = file.Close()
 	assert.NoError(t, err)
-	assert.Len(t, v.History, 2)
-	assert.Equal(t, 0, v.History[0].Version.Major)
-	assert.Equal(t, 0, v.History[0].Version.Minor)
-	assert.Equal(t, 0, v.History[0].Version.Patch)
-	assert.Equal(t, 1, v.History[1].Version.Major)
-	assert.Equal(t, 0, v.History[1].Version.Minor)
-	assert.Equal(t, 0, v.History[1].Version.Patch)
+
+	f = build()
+
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
+
+	err = f.ReadFile()
+	assert.NoError(t, err)
+	assert.Len(t, f.GetHistory(), 2)
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetMajor())
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetMinor())
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetPatch())
+	assert.Equal(t, 0, f.GetHistory()[1].GetVersion().GetMajor())
+	assert.Equal(t, 0, f.GetHistory()[1].GetVersion().GetMinor())
+	assert.Equal(t, 0, f.GetHistory()[1].GetVersion().GetPatch())
 }
 
 func TestReadVersionFileNotFound(t *testing.T) {
@@ -88,13 +91,13 @@ func TestReadVersionFileNotFound(t *testing.T) {
 	err := fs.Mkdir(testFilePath, 0o777)
 	require.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	assert.Error(t, err)
 	// Überprüfe, ob der Fehler FileNotFoundError ist
 }
@@ -111,15 +114,16 @@ func TestReadVersionInvalidFormat(t *testing.T) {
 	_, err = file.Write(invalidTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	assert.Error(t, err)
 	// Überprüfe, ob der Fehler FileFormatError ist
 }
@@ -130,49 +134,49 @@ func TestWriteVersionSuccess(t *testing.T) {
 	err := fs.Mkdir(testFilePath, 0o777)
 	require.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.writeFile()
+	err = f.WriteFile()
 	assert.NoError(t, err)
 
 	filePath := filepath.Join(testFilePath, testFileName)
-	exists, _ := afero.Exists(v.fs, filePath)
+	exists, _ := afero.Exists(f.GetFileSystem(), filePath)
 	assert.True(t, exists)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	require.NoError(t, err)
-	assert.Len(t, v.History, 1)
-	assert.Equal(t, 0, v.History[0].Version.Major)
-	assert.Equal(t, 0, v.History[0].Version.Minor)
-	assert.Equal(t, 0, v.History[0].Version.Patch)
+	assert.Len(t, f.GetHistory(), 1)
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetMajor())
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetMinor())
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetPatch())
 }
 
 func TestWriteVersionCreateFolder(t *testing.T) {
 	fs := afero.NewMemMapFs()
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err := v.writeFile()
+	err := f.WriteFile()
 	assert.NoError(t, err)
 
 	filePath := filepath.Join(testFilePath, testFileName)
-	exists, _ := afero.Exists(v.fs, filePath)
+	exists, _ := afero.Exists(f.GetFileSystem(), filePath)
 	assert.True(t, exists)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	require.NoError(t, err)
-	assert.Len(t, v.History, 1)
-	assert.Equal(t, 0, v.History[0].Version.Major)
-	assert.Equal(t, 0, v.History[0].Version.Minor)
-	assert.Equal(t, 0, v.History[0].Version.Patch)
+	assert.Len(t, f.GetHistory(), 1)
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetMajor())
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetMinor())
+	assert.Equal(t, 0, f.GetHistory()[0].GetVersion().GetPatch())
 }
 
 func TestSafeWriteFile(t *testing.T) {
@@ -187,15 +191,16 @@ func TestSafeWriteFile(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.safeWriteFile()
+	err = f.SafeWriteFile()
 	assert.Error(t, err)
 }
 
@@ -211,17 +216,18 @@ func TestGetVersion(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 
-	version := v.getVersion()
+	version := f.GetVersion()
 	assert.Equal(t, "1.0.0", version)
 }
 
@@ -237,17 +243,18 @@ func TestGetLastVersion(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 
-	lastVersion := v.getLastVersion()
+	lastVersion := f.GetLastVersion()
 	assert.Equal(t, "0.0.0", lastVersion)
 }
 
@@ -263,22 +270,23 @@ func TestBumpMajor(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	require.NoError(t, err)
 
-	err = v.bumpMajor()
+	err = f.BumpMajor()
 	assert.NoError(t, err)
-	assert.Len(t, v.History, 3)
-	assert.Equal(t, v.getVersion(), "2.0.0")
-	assert.Equal(t, v.getLastVersion(), "1.0.0")
+	assert.Len(t, f.GetHistory(), 3)
+	assert.Equal(t, f.GetVersion(), "2.0.0")
+	assert.Equal(t, f.GetLastVersion(), "1.0.0")
 }
 
 func TestBumpMinor(t *testing.T) {
@@ -293,22 +301,23 @@ func TestBumpMinor(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	require.NoError(t, err)
 
-	err = v.bumpMinor()
+	err = f.BumpMinor()
 	assert.NoError(t, err)
-	assert.Len(t, v.History, 3)
-	assert.Equal(t, v.getVersion(), "1.1.0")
-	assert.Equal(t, v.getLastVersion(), "1.0.0")
+	assert.Len(t, f.GetHistory(), 3)
+	assert.Equal(t, f.GetVersion(), "1.1.0")
+	assert.Equal(t, f.GetLastVersion(), "1.0.0")
 }
 
 func TestBumpPatch(t *testing.T) {
@@ -323,30 +332,31 @@ func TestBumpPatch(t *testing.T) {
 	_, err = file.Write(validTestFile)
 	require.NoError(t, err)
 
-	file.Close()
+	err = file.Close()
+	assert.NoError(t, err)
 
-	v = New()
+	f = build()
 
-	v.setFileSystem(fs)
-	v.setFilePath(testFilePath)
-	v.setFileName(testFileName)
+	f.SetFileSystem(fs)
+	f.SetFilePath(testFilePath)
+	f.SetFileName(testFileName)
 
-	err = v.readFile()
+	err = f.ReadFile()
 	require.NoError(t, err)
 
-	err = v.bumpPatch()
+	err = f.BumpPatch()
 	assert.NoError(t, err)
-	assert.Len(t, v.History, 3)
-	assert.Equal(t, v.getVersion(), "1.0.1")
-	assert.Equal(t, v.getLastVersion(), "1.0.0")
+	assert.Len(t, f.GetHistory(), 3)
+	assert.Equal(t, f.GetVersion(), "1.0.1")
+	assert.Equal(t, f.GetLastVersion(), "1.0.0")
 }
 
 func TestSetDefaultVersion(t *testing.T) {
-	v = New()
+	f = build()
 
-	err := v.setDefaultVersion("1.0.0")
+	err := f.SetDefaultVersion("1.0.0")
 	assert.NoError(t, err)
-	assert.Len(t, v.History, 1)
-	assert.Equal(t, v.getVersion(), "1.0.0")
+	assert.Len(t, f.GetHistory(), 1)
+	assert.Equal(t, f.GetVersion(), "1.0.0")
 
 }

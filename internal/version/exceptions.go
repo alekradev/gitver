@@ -21,19 +21,19 @@ func (p UnhandledError) Error() string {
 type FileAlreadyExistsError string
 
 func (p FileAlreadyExistsError) Error() string {
-	return fmt.Sprintf("error code: %d - Data File %q Already Exists", fileAlreadyExistsErrorCode, string(p))
+	return fmt.Sprintf("error code: %d - VersionFile File %q Already Exists", fileAlreadyExistsErrorCode, string(p))
 }
 
 type FileNotFoundError string
 
 func (p FileNotFoundError) Error() string {
-	return fmt.Sprintf("error code: %d - Data File %q not found", fileNotFoundErrorCode, string(p))
+	return fmt.Sprintf("error code: %d - VersionFile File %q not found", fileNotFoundErrorCode, string(p))
 }
 
 type FileFormatError string
 
 func (p FileFormatError) Error() string {
-	return fmt.Sprintf("error code: %d - Data File %q is malformed", fileFormatErrorCode, string(p))
+	return fmt.Sprintf("error code: %d - VersionFile File %q is malformed", fileFormatErrorCode, string(p))
 }
 
 type ProjectDirectoryNotFoundError string

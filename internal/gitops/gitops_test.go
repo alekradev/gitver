@@ -82,7 +82,7 @@ func createTestRepo() (*git.Repository, error) {
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to commit: %w", err)
+			return nil, fmt.Errorf("failed to Commit: %w", err)
 		}
 		commitHashes = append(commitHashes, hash)
 	}
@@ -108,73 +108,73 @@ func (o *MockGitObject) Open(path string) (*git.Repository, error) {
 
 func TestReadRepository(t *testing.T) {
 	obj := new(MockGitObject)
-	g := New()
-	g.setObject(obj)
-	err := g.readRepository()
+	g := build()
+	g.SetObject(obj)
+	err := g.ReadRepository()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, g.repository)
-	assert.NotEmpty(t, g.worktree)
-	assert.Equal(t, g.name, username)
-	assert.Equal(t, g.email, email)
+	assert.NotEmpty(t, g.GetRepository())
+	assert.NotEmpty(t, g.GetWorktree())
+	assert.Equal(t, g.GetName(), username)
+	assert.Equal(t, g.GetEmail(), email)
 }
 
 func TestIsCleanRepo(t *testing.T) {
 	obj := new(MockGitObject)
-	g := New()
-	g.setObject(obj)
-	err := g.readRepository()
+	g := build()
+	g.SetObject(obj)
+	err := g.ReadRepository()
 	require.NoError(t, err)
 
-	isClean, err := g.isCleanRepo()
+	isClean, err := g.IsCleanRepo()
 	assert.NoError(t, err)
 	assert.True(t, isClean)
 }
 
 func TestIsCleanRepoWithChanges(t *testing.T) {
 	obj := new(MockGitObject)
-	g := New()
-	g.setObject(obj)
-	err := g.readRepository()
+	g := build()
+	g.SetObject(obj)
+	err := g.ReadRepository()
 	require.NoError(t, err)
 
-	_, err = g.worktree.Filesystem.Create(exampleFileName)
-	_, err = g.worktree.Add(exampleFileName)
+	_, err = g.GetWorktree().Filesystem.Create(exampleFileName)
+	_, err = g.GetWorktree().Add(exampleFileName)
 
-	isClean, err := g.isCleanRepo()
+	isClean, err := g.IsCleanRepo()
 	assert.NoError(t, err)
 	assert.False(t, isClean)
 }
 
 func TestAdd(t *testing.T) {
 	obj := new(MockGitObject)
-	g := New()
-	g.setObject(obj)
-	err := g.readRepository()
+	g := build()
+	g.SetObject(obj)
+	err := g.ReadRepository()
 	require.NoError(t, err)
 
-	_, err = g.worktree.Filesystem.Create(exampleFileName)
+	_, err = g.GetWorktree().Filesystem.Create(exampleFileName)
 	require.NoError(t, err)
 
-	_, err = g.addAll()
+	_, err = g.AddAll()
 
 	assert.NoError(t, err)
 }
 
 func TestCommit(t *testing.T) {
 	obj := new(MockGitObject)
-	g := New()
-	g.setObject(obj)
-	err := g.readRepository()
+	g := build()
+	g.SetObject(obj)
+	err := g.ReadRepository()
 	require.NoError(t, err)
 
-	_, err = g.worktree.Filesystem.Create(exampleFileName)
-	_, err = g.worktree.Add(exampleFileName)
+	_, err = g.GetWorktree().Filesystem.Create(exampleFileName)
+	_, err = g.GetWorktree().Add(exampleFileName)
 
-	err = g.commit(exampleCommitMessage, false)
-	isClean, err := g.isCleanRepo()
+	err = g.Commit(exampleCommitMessage, false)
+	isClean, err := g.IsCleanRepo()
 	require.NoError(t, err)
 
-	commits, err := g.getCommitsBetweenTags(EMPTY, EMPTY)
+	commits, err := g.GetCommitsBetweenTags(EMPTY, EMPTY)
 	require.NoError(t, err)
 
 	assert.NoError(t, err)
@@ -185,9 +185,9 @@ func TestCommit(t *testing.T) {
 
 //func TestCommitAmend(t *testing.T) {
 //	obj := new(MockGitObject)
-//	g := New()
-//	g.setObject(obj)
-//	err := g.readRepository()
+//	g := build()
+//	g.SetObject(obj)
+//	err := g.ReadRepository()
 //	require.NoError(t, err)
 //
 //	_, err = g.worktree.Filesystem.Create(exampleFileName)
@@ -197,11 +197,11 @@ func TestCommit(t *testing.T) {
 //	require.NoError(t, err)
 //	require.NotEmpty(t, hash)
 //
-//	err = g.commit(exampleCommitMessage, true)
-//	isClean, err := g.isCleanRepo()
+//	err = g.Commit(exampleCommitMessage, true)
+//	isClean, err := g.IsCleanRepo()
 //	require.NoError(t, err)
 //
-//	commits, err := g.getCommitsBetweenTags(EMPTY, EMPTY)
+//	commits, err := g.GetCommitsBetweenTags(EMPTY, EMPTY)
 //	require.NoError(t, err)
 //
 //	assert.NoError(t, err)
@@ -212,24 +212,24 @@ func TestCommit(t *testing.T) {
 
 func TestCreateTag(t *testing.T) {
 	obj := new(MockGitObject)
-	g := New()
-	g.setObject(obj)
-	err := g.readRepository()
+	g := build()
+	g.SetObject(obj)
+	err := g.ReadRepository()
 	require.NoError(t, err)
 
-	headRef, err := g.repository.Head()
+	headRef, err := g.GetRepository().Head()
 	require.NoError(t, err)
 
 	tagName := "v2.0.0"
 	tagMessage := "Initial release\n"
 
-	err = g.createTag(tagName, tagMessage)
+	err = g.CreateTag(tagName, tagMessage)
 	assert.NoError(t, err)
 
-	tagRef, err := g.repository.Tag(tagName)
+	tagRef, err := g.GetRepository().Tag(tagName)
 	require.NoError(t, err)
 
-	tagObj, err := g.repository.TagObject(tagRef.Hash())
+	tagObj, err := g.GetRepository().TagObject(tagRef.Hash())
 	require.NoError(t, err)
 
 	assert.Equal(t, tagMessage, tagObj.Message)
@@ -240,13 +240,13 @@ func TestCreateTag(t *testing.T) {
 //
 //	obj := new(MockGitObject)
 //
-//	g := New()
-//	g.setObject(obj)
-//	err := g.readRepository()
+//	g := build()
+//	g.SetObject(obj)
+//	err := g.ReadRepository()
 //	require.NoError(t, err)
 //
 //	// Führe die zu testende Funktion aus
-//	tagName, err := g.getLatestTag()
+//	tagName, err := g.GetLatestTag()
 //
 //	// Überprüfe das Ergebnis
 //	assert.NoError(t, err)
@@ -256,10 +256,10 @@ func TestCreateTag(t *testing.T) {
 func TestGetTag(t *testing.T) {
 	r, _ := createTestRepo()
 
-	g := New()
-	g.setRepository(r)
+	g := build()
+	g.SetRepository(r)
 
-	hash, err := g.getTag(tags[0])
+	hash, err := g.GetTag(tags[0])
 	assert.NoError(t, err)
 	assert.NotEmpty(t, hash)
 }
@@ -267,10 +267,10 @@ func TestGetTag(t *testing.T) {
 func TestGetCommitsBetweenTags(t *testing.T) {
 	r, _ := createTestRepo()
 
-	g := New()
-	g.setRepository(r)
+	g := build()
+	g.SetRepository(r)
 
-	commits, err := g.getCommitsBetweenTags(tags[1], tags[0])
+	commits, err := g.GetCommitsBetweenTags(tags[1], tags[0])
 	assert.NoError(t, err)
 	assert.NotEmpty(t, commits)
 	assert.Len(t, commits, 3)
@@ -279,10 +279,10 @@ func TestGetCommitsBetweenTags(t *testing.T) {
 func TestGetCommitsBetweenFirstAndTag(t *testing.T) {
 	r, _ := createTestRepo()
 
-	g := New()
-	g.setRepository(r)
+	g := build()
+	g.SetRepository(r)
 
-	commits, err := g.getCommitsBetweenTags(tags[1], EMPTY)
+	commits, err := g.GetCommitsBetweenTags(tags[1], EMPTY)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, commits)
 	assert.Len(t, commits, 4)
@@ -291,10 +291,10 @@ func TestGetCommitsBetweenFirstAndTag(t *testing.T) {
 func TestGetCommitsBetweenTagAndHead(t *testing.T) {
 	r, _ := createTestRepo()
 
-	g := New()
-	g.setRepository(r)
+	g := build()
+	g.SetRepository(r)
 
-	commits, err := g.getCommitsBetweenTags(EMPTY, tags[0])
+	commits, err := g.GetCommitsBetweenTags(EMPTY, tags[0])
 	assert.NoError(t, err)
 	assert.NotEmpty(t, commits)
 	assert.Len(t, commits, 4)
@@ -303,10 +303,10 @@ func TestGetCommitsBetweenTagAndHead(t *testing.T) {
 func TestGetCommitsBetweenFirstAndHead(t *testing.T) {
 	r, _ := createTestRepo()
 
-	g := New()
-	g.setRepository(r)
+	g := build()
+	g.SetRepository(r)
 
-	commits, err := g.getCommitsBetweenTags(EMPTY, EMPTY)
+	commits, err := g.GetCommitsBetweenTags(EMPTY, EMPTY)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, commits)
 	assert.Len(t, commits, 5)

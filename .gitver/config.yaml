@@ -1,1 +1,26 @@
-version: 2024-04-02
+version: 2024-02-04
+config:
+  default:
+    version: 0.0.0
+  commands:
+    major: [bump major]
+    minor: [bump minor]
+    patch: [bump patch]
+    auto: [bump auto]
+  vcs:
+    messages:
+      commit: "Bump Version [%s] -> [%s]"
+      tag: "Tagged by gitver"
+    format:
+      releaseTag: "r%s"
+      versionTag: "v%s"
+  files:
+    - filepath: ./test/pom.xml
+      format: xml
+      xpath: /root/version
+    - filepath: ./test/test.json
+      format: json
+      jsonpath:
+    - filepath: ./test/test.txt
+      format: text
+      placeholder: {VERSION}

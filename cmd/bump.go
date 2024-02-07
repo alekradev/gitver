@@ -6,25 +6,20 @@ import (
 	"github.com/spf13/cobra"
 	"gitver/internal/constants"
 	"gitver/internal/gitops"
-	"gitver/internal/version"
 	"log"
 	"strings"
 )
 
 var (
-	autoFlag   bool
-	majorFlag  bool
-	minorFlag  bool
-	patchFlag  bool
-	commitFlag bool
-	gitFlag    string
-	amend      bool
-	verbose    bool
-)
-
-const (
-	CommitTag     = "COMMIT_TAG"
-	CommitTagPush = "COMMIT_TAG_PUSH"
+	autoFlag    bool
+	majorFlag   bool
+	minorFlag   bool
+	patchFlag   bool
+	commitFlag  bool
+	amendFlag   bool
+	verboseFlag bool
+	pushFlag    bool
+	tagFlag     bool
 )
 
 const (
@@ -34,39 +29,53 @@ const (
 	PriorityBreakingChange
 )
 
-const (
-	message0001 = "Please provide a valid flag: --auto, --commit, --major, --minor, or --patch"
-	message0002 = "data bumped: %v -> %v"
-)
-
 // bumpCmd represents the bump command
 var bumpCmd = &cobra.Command{
-	Use:   "bump",
-	Short: "Bump the version of the project",
-	Long:  "Bump the version of the project based on the provided flags: --auto, --commit, --major, --minor, or --patch.",
+	Use:   DescBumpCommand,
+	Short: DescBumpCommandShort,
+	Long:  DescBumpCommandLong,
 	Run:   executeBumpCmd,
 }
 
 func init() {
 	rootCmd.AddCommand(bumpCmd)
-	bumpCmd.Flags().BoolVar(&autoFlag, "auto", false, "Bump version from git commits")
-	bumpCmd.Flags().BoolVar(&commitFlag, "commit", false, "Bump version from git commits")
-	bumpCmd.Flags().BoolVar(&majorFlag, "major", false, "Bump the major version")
-	bumpCmd.Flags().BoolVar(&minorFlag, "minor", false, "Bump the minor version")
-	bumpCmd.Flags().BoolVar(&patchFlag, "patch", false, "Bump the patch version")
-	bumpCmd.Flags().BoolVar(&verbose, "verbose", false, "Bump the patch version")
-	bumpCmd.Flags().BoolVar(&amend, "amend", false, "Bump the patch version")
-	bumpCmd.Flags().StringVar(&gitFlag, "git", "", "Auto commit Bump version changes. Valid Values are COMMIT_TAG COMMIT_TAG_PUSH")
+	bumpCmd.Flags().BoolVar(&autoFlag, "auto", false, DescAutoFlag)
+	bumpCmd.Flags().BoolVar(&commitFlag, "commit", false, DescCommitFlag)
+	bumpCmd.Flags().BoolVar(&majorFlag, "major", false, DescMajorFlag)
+	bumpCmd.Flags().BoolVar(&minorFlag, "minor", false, DescMinorFlag)
+	bumpCmd.Flags().BoolVar(&patchFlag, "patch", false, DescPatchFlag)
+	bumpCmd.Flags().BoolVar(&verboseFlag, "verbose", false, DescVerboseFlag)
+	bumpCmd.Flags().BoolVar(&amendFlag, "amend", false, DescAmendFlag)
+	bumpCmd.Flags().BoolVar(&tagFlag, "tag", false, DescTagFlag)
+	bumpCmd.Flags().BoolVar(&pushFlag, "push", false, DescPushFlag)
+}
+
+func validateFlags() (bool, error) {
+	if !tagFlag && pushFlag {
+		return false, fmt.Errorf(ErrPushWithoutTag)
+	}
+
+	if !tagFlag && amendFlag {
+		return false, fmt.Errorf(ErrAmendWithoutTag)
+	}
+
+	if !validateMode(majorFlag, minorFlag, patchFlag, autoFlag, commitFlag) {
+		return false, fmt.Errorf(ErrInvalidModeFlag)
+	}
+
+	return true, nil
 }
 
 func executeBumpCmd(cmd *cobra.Command, args []string) {
-	if !validateMode(majorFlag, minorFlag, patchFlag, autoFlag, commitFlag) {
-		log.Fatalf(message0001)
+
+	_, err := validateFlags()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	loadConfig()
 
-	if gitFlag == CommitTag || gitFlag == CommitTagPush || autoFlag {
+	if tagFlag || pushFlag || autoFlag {
 		err := prepareGitOperation()
 		if err != nil {
 			log.Fatal(err)
@@ -89,7 +98,7 @@ func executeBumpCmd(cmd *cobra.Command, args []string) {
 
 	executeGitOperations()
 
-	log.Printf(message0002, version.GetLastVersion(), version.GetVersion())
+	log.Printf(MsgVersionChange, F.GetLastVersion(), F.GetVersion())
 }
 
 func validateMode(values ...bool) bool {
@@ -103,34 +112,34 @@ func validateMode(values ...bool) bool {
 }
 
 func executeMajorMode() {
-	prints("bump major version")
-	err := version.BumpMajor()
+	prints(MsgBumpMajorInit)
+	err := F.BumpMajor()
 	if err != nil {
 		log.Fatal(err)
 	}
-	prints("bump major version success")
+	prints(MsgBumpMajorSuccess)
 }
 
 func executeMinorMode() {
-	prints("bump minor version")
-	err := version.BumpMinor()
+	prints(MsgBumpMinorInit)
+	err := F.BumpMinor()
 	if err != nil {
 		log.Fatal(err)
 	}
-	prints("bump minor version success")
+	prints(MsgBumpMinorSuccess)
 }
 
 func executePatchMode() {
-	prints("bump patch version success")
-	err := version.BumpPatch()
+	prints(MsgBumpPatchInit)
+	err := F.BumpPatch()
 	if err != nil {
 		log.Fatal(err)
 	}
-	prints("bump patch version success")
+	prints(MsgBumpPatchSuccess)
 }
 
 func executeAutoMode() {
-	prints("start auto mode")
+	prints(MsgAutoBumpInit)
 	bumpFunc, err := detectAutoBump()
 	if err != nil {
 		log.Fatal(err)
@@ -139,11 +148,11 @@ func executeAutoMode() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	prints("start auto mode success")
+	prints(MsgAutoBumpSuccess)
 }
 
 func executeCommitMode() {
-	prints("start commit mode")
+	prints(MsgCommitBumpInit)
 	bumpFunc, err := detectCommitBump()
 	if err != nil {
 		log.Fatal(err)
@@ -152,76 +161,76 @@ func executeCommitMode() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	prints("start commit mode success")
+	prints(MsgCommitBumpSuccess)
 }
 
 func detectAutoBump() (func() error, error) {
-	prints("start detect bump function for auto mode")
-	tag, err := gitops.GetLastTag()
+	prints(MsgDetectingBumpMethod)
+	tag, err := G.GetLatestTag()
 	if err != nil {
 		return nil, err
 	}
 
-	if tag == fmt.Sprintf(constants.ReleaseTag, version.GetVersion()) {
+	if tag == fmt.Sprintf(constants.ReleaseTag, F.GetVersion()) {
 		return analyzeCommits(tag)
-	} else if tag == fmt.Sprintf(constants.VersionTag, version.GetVersion()) {
-		return analyzeAndCompareCommits(tag, fmt.Sprintf(constants.ReleaseTag, version.GetLastVersion()))
+	} else if tag == fmt.Sprintf(constants.VersionTag, F.GetVersion()) {
+		return analyzeAndCompareCommits(tag, fmt.Sprintf(constants.ReleaseTag, F.GetLastVersion()))
 	} else if tag == "" {
 		return analyzeCommits(tag)
 	} else {
-		return nil, fmt.Errorf("no new version required")
+		return nil, fmt.Errorf(ErrNoVersionBump)
 	}
 }
 
 func analyzeCommits(tag string) (func() error, error) {
-	logf("analyze commits from head to %s...", tag)
-	commits, err := gitops.GetCommits(tag)
+	logf(LogAnalyzingCommits, "head", tag)
+	commits, err := G.GetCommitsBetweenTags(gitops.HEAD, tag)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	logf("%d commits found", len(commits))
+	logf(LogCommitsFound, len(commits))
 
 	priority := findCommitPriority(commits)
-	logf("bump priority are: %d", priority)
+	logf(MsgBumpPrioritySet, priority)
 	switch priority {
 	case PriorityBreakingChange:
-		return version.BumpMajor, nil
+		return F.BumpMajor, nil
 	case PriorityFeat:
-		return version.BumpMinor, nil
+		return F.BumpMinor, nil
 	case PriorityFix:
-		return version.BumpPatch, nil
+		return F.BumpPatch, nil
 	default:
-		return nil, fmt.Errorf("no new version required")
+		return nil, fmt.Errorf(ErrBumpMethodDetection)
 	}
 }
 
 func analyzeAndCompareCommits(starttag, endtag string) (func() error, error) {
-	logf("analyze commits from %s to %s...", starttag, endtag)
-	oldCommits, err := gitops.GetCommitsBetweenTags(starttag, endtag)
+	logf(LogAnalyzingCommits, starttag, endtag)
+	oldCommits, err := G.GetCommitsBetweenTags(starttag, endtag)
 	if err != nil {
 		log.Fatal(err)
 	}
-	logf("%d commits found", len(oldCommits))
+	logf(LogCommitsFound, len(oldCommits))
 
-	logf("analyze commits from head to %s...", starttag)
-	newCommits, err := gitops.GetCommits(starttag)
+	logf(LogAnalyzingCommits, "head", starttag)
+	newCommits, err := G.GetCommitsBetweenTags(gitops.HEAD, starttag)
 	if err != nil {
 		log.Fatal(err)
 	}
-	logf("%d commits found", len(newCommits))
+	logf(LogCommitsFound, len(newCommits))
 
 	priority := comparePriority(findCommitPriority(oldCommits), findCommitPriority(newCommits))
-	logf("bump priority are: %d", priority)
+	logf(MsgBumpPrioritySet, priority)
 	switch priority {
 	case PriorityBreakingChange:
-		return version.BumpMajor, nil
+		return F.BumpMajor, nil
 	case PriorityFeat:
-		return version.BumpMinor, nil
+		return F.BumpMinor, nil
 	case PriorityFix:
-		return version.BumpPatch, nil
+		return F.BumpPatch, nil
 	default:
-		return nil, fmt.Errorf("cannot detect bump function")
+		return nil, fmt.Errorf(ErrNoVersionBump)
 	}
 }
 
@@ -233,7 +242,7 @@ func comparePriority(first, second int) int {
 }
 
 func detectCommitBump() (func() error, error) {
-	commit, err := gitops.GetHeadCommit()
+	commit, err := G.GetHeadCommit()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -241,35 +250,35 @@ func detectCommitBump() (func() error, error) {
 	if strings.Contains(commit.Message, "[bump]") {
 		return detectAutoBump()
 	} else if strings.Contains(commit.Message, "[bump major]") {
-		return version.BumpMajor, nil
+		return F.BumpMajor, nil
 	} else if strings.Contains(commit.Message, "[bump minor]") {
-		return version.BumpMinor, nil
+		return F.BumpMinor, nil
 	} else if strings.Contains(commit.Message, "[bump patch]") {
-		return version.BumpPatch, nil
+		return F.BumpPatch, nil
 	}
 
-	return nil, fmt.Errorf("no bump commanded")
+	return nil, fmt.Errorf(ErrNoBumpCommandFound)
 }
 
 func executeGitOperations() {
-	if gitFlag == CommitTag || gitFlag == CommitTagPush {
+	if tagFlag || pushFlag {
 
-		if _, err := gitops.AddAll(); err != nil {
-			log.Fatal(err)
+		if _, err := G.AddAll(); err != nil {
+			log.Fatal(ErrGitOperationFailed, err)
 		}
 
-		if err := gitops.Commit(fmt.Sprintf(constants.CommitMessage, version.GetLastVersion(), version.GetVersion()), amend); err != nil {
-			log.Fatal(err)
+		if err := G.Commit(fmt.Sprintf(constants.CommitMessage, F.GetLastVersion(), F.GetVersion()), amendFlag); err != nil {
+			log.Fatal(ErrGitOperationFailed, err)
 		}
 
-		if err := gitops.CreateTag(fmt.Sprintf(constants.VersionTag, version.GetVersion()), constants.TagMessage); err != nil {
-			log.Fatal(err)
+		if err := G.CreateTag(fmt.Sprintf(constants.VersionTag, F.GetVersion()), constants.TagMessage); err != nil {
+			log.Fatal(ErrGitOperationFailed, err)
 		}
 	}
 
-	if gitFlag == CommitTagPush {
-		if err := gitops.Push(); err != nil {
-			log.Fatal(err)
+	if pushFlag {
+		if err := G.Push(); err != nil {
+			log.Fatal(ErrGitOperationFailed, err)
 		}
 	}
 }
@@ -281,13 +290,13 @@ func findCommitPriority(commits []*object.Commit) int {
 		message := commit.Message
 
 		if strings.Contains(message, "BREAKING CHANGE:") {
-			logf("BREAKING CHANGE found: %s", commit.Hash)
+			logf(MsgBreakingChangeDetected, commit.Hash)
 			return PriorityBreakingChange
 		} else if strings.Contains(message, "feat:") && highestPriority < PriorityFeat {
-			logf("FEATURE found: %s", commit.Hash)
+			logf(MsgFeatureDetected, commit.Hash)
 			highestPriority = PriorityFeat
 		} else if strings.Contains(message, "fix:") && highestPriority < PriorityFix {
-			logf("FIX found: %s", commit.Hash)
+			logf(MsgFixDetected, commit.Hash)
 			highestPriority = PriorityFix
 		}
 	}
