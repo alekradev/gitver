@@ -1,305 +1,109 @@
 package cmd
 
 import (
-	"fmt"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
-	"gitver/internal/constants"
-	"gitver/internal/gitops"
+	"gitver/internal/version"
 	"log"
-	"strings"
-)
-
-var (
-	autoFlag    bool
-	majorFlag   bool
-	minorFlag   bool
-	patchFlag   bool
-	commitFlag  bool
-	amendFlag   bool
-	verboseFlag bool
-	pushFlag    bool
-	tagFlag     bool
 )
 
 const (
-	PriorityNone = iota
-	PriorityFix
-	PriorityFeat
-	PriorityBreakingChange
+	DescReleaseCommand      = "bump"
+	DescReleaseCommandShort = "Bump the project version."
+	DescReleaseCommandLong  = "Bumps the project version based on the specified flags: --auto, --commit, --major, --minor, or --patch."
+	DescAddFlag             = "Add all modified files to the stage"
+	DescCommitFlag          = "Creates a commit"
+	DescAmendFlag           = "Amends the last commit during the version bump process."
+	DescTagFlag             = "Creates a tag for the new version."
+	DescPushFlag            = "Pushes changes to the remote git repository."
+	DescPrereleaseFlag      = "Create a version based on the modus but will not bumped. Excluded git operations"
+	NameAddFlag             = "add"
+	NameAmendFlag           = "amend"
+	NameCommitFlag          = "commit"
+	NameTagFlag             = "tag"
+	NamePushFlag            = "push"
+	NamePrereleaseFlag      = "prerelease"
+
+	ErrWriteFile                  = "error by write file. causes: %s"
+	ErrGitAddFailed               = "error by add files to git stage. causes: %s"
+	ErrGitCommitFailed            = "error by commit. causes: %s"
+	ErrGitTagFailed               = "error by create git tag. causes: %s"
+	ErrGitPushFailed              = "error by push git repository. causes: %s"
+	ErrPrereleaseWithGitOperation = "the flag --prerelease is not allowed with --add, --commit, --tag, --push"
+	ErrAmendWithoutTag            = "--amend flag requires --commit flag to be set"
 )
 
-// bumpCmd represents the bump command
-var bumpCmd = &cobra.Command{
-	Use:   DescBumpCommand,
-	Short: DescBumpCommandShort,
-	Long:  DescBumpCommandLong,
-	Run:   executeBumpCmd,
+var (
+	commitFlag     bool
+	amendFlag      bool
+	verboseFlag    bool
+	pushFlag       bool
+	tagFlag        bool
+	addFlag        bool
+	prereleaseFlag bool
+)
+
+// releaseCmd represents the bump command
+var releaseCmd = &cobra.Command{
+	Use:               DescReleaseCommand,
+	Short:             DescReleaseCommandShort,
+	Long:              DescReleaseCommandLong,
+	PersistentPreRun:  preRunReleaseCmd,
+	PersistentPostRun: postRunReleaseCmd,
 }
 
 func init() {
-	rootCmd.AddCommand(bumpCmd)
-	bumpCmd.Flags().BoolVar(&autoFlag, "auto", false, DescAutoFlag)
-	bumpCmd.Flags().BoolVar(&commitFlag, "commit", false, DescCommitFlag)
-	bumpCmd.Flags().BoolVar(&majorFlag, "major", false, DescMajorFlag)
-	bumpCmd.Flags().BoolVar(&minorFlag, "minor", false, DescMinorFlag)
-	bumpCmd.Flags().BoolVar(&patchFlag, "patch", false, DescPatchFlag)
-	bumpCmd.Flags().BoolVar(&verboseFlag, "verbose", false, DescVerboseFlag)
-	bumpCmd.Flags().BoolVar(&amendFlag, "amend", false, DescAmendFlag)
-	bumpCmd.Flags().BoolVar(&tagFlag, "tag", false, DescTagFlag)
-	bumpCmd.Flags().BoolVar(&pushFlag, "push", false, DescPushFlag)
+	rootCmd.AddCommand(releaseCmd)
+	releaseCmd.PersistentFlags().BoolVar(&addFlag, NameAddFlag, false, DescAddFlag)
+	releaseCmd.PersistentFlags().BoolVar(&amendFlag, NameAmendFlag, false, DescAmendFlag)
+	releaseCmd.PersistentFlags().BoolVar(&commitFlag, NameCommitFlag, false, DescCommitFlag)
+	releaseCmd.PersistentFlags().BoolVar(&tagFlag, NameTagFlag, false, DescTagFlag)
+	releaseCmd.PersistentFlags().BoolVar(&pushFlag, NamePushFlag, false, DescPushFlag)
+	releaseCmd.PersistentFlags().BoolVar(&prereleaseFlag, NamePrereleaseFlag, false, DescPrereleaseFlag)
 }
 
-func validateFlags() (bool, error) {
-	if !tagFlag && pushFlag {
-		return false, fmt.Errorf(ErrPushWithoutTag)
+func preRunReleaseCmd(cmd *cobra.Command, args []string) {
+	if prereleaseFlag && (amendFlag || commitFlag || tagFlag || pushFlag || addFlag) {
+		log.Fatal(ErrPrereleaseWithGitOperation)
 	}
 
-	if !tagFlag && amendFlag {
-		return false, fmt.Errorf(ErrAmendWithoutTag)
+	if !commitFlag && amendFlag {
+		log.Fatal(ErrAmendWithoutTag)
 	}
-
-	if !validateMode(majorFlag, minorFlag, patchFlag, autoFlag, commitFlag) {
-		return false, fmt.Errorf(ErrInvalidModeFlag)
-	}
-
-	return true, nil
 }
 
-func executeBumpCmd(cmd *cobra.Command, args []string) {
-
-	_, err := validateFlags()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	loadConfig()
-
-	if tagFlag || pushFlag || autoFlag {
-		err := prepareGitOperation()
+func postRunReleaseCmd(cmd *cobra.Command, args []string) {
+	var v = version.Get()
+	if !prereleaseFlag {
+		err := v.SafeWriteFile()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf(ErrWriteFile, err)
 		}
 
-	}
-
-	switch {
-	case majorFlag:
-		executeMajorMode()
-	case minorFlag:
-		executeMinorMode()
-	case patchFlag:
-		executePatchMode()
-	case autoFlag:
-		executeAutoMode()
-	case commitFlag:
-		executeCommitMode()
-	}
-
-	executeGitOperations()
-
-	log.Printf(MsgVersionChange, F.GetLastVersion(), F.GetVersion())
-}
-
-func validateMode(values ...bool) bool {
-	trueCount := 0
-	for _, value := range values {
-		if value {
-			trueCount++
+		if addFlag {
+			err := v.Add()
+			if err != nil {
+				log.Printf(ErrGitAddFailed, err)
+			}
 		}
-	}
-	return trueCount == 1
-}
-
-func executeMajorMode() {
-	prints(MsgBumpMajorInit)
-	err := F.BumpMajor()
-	if err != nil {
-		log.Fatal(err)
-	}
-	prints(MsgBumpMajorSuccess)
-}
-
-func executeMinorMode() {
-	prints(MsgBumpMinorInit)
-	err := F.BumpMinor()
-	if err != nil {
-		log.Fatal(err)
-	}
-	prints(MsgBumpMinorSuccess)
-}
-
-func executePatchMode() {
-	prints(MsgBumpPatchInit)
-	err := F.BumpPatch()
-	if err != nil {
-		log.Fatal(err)
-	}
-	prints(MsgBumpPatchSuccess)
-}
-
-func executeAutoMode() {
-	prints(MsgAutoBumpInit)
-	bumpFunc, err := detectAutoBump()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = bumpFunc()
-	if err != nil {
-		log.Fatal(err)
-	}
-	prints(MsgAutoBumpSuccess)
-}
-
-func executeCommitMode() {
-	prints(MsgCommitBumpInit)
-	bumpFunc, err := detectCommitBump()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = bumpFunc()
-	if err != nil {
-		log.Fatal(err)
-	}
-	prints(MsgCommitBumpSuccess)
-}
-
-func detectAutoBump() (func() error, error) {
-	prints(MsgDetectingBumpMethod)
-	tag, err := G.GetLatestTag()
-	if err != nil {
-		return nil, err
-	}
-
-	if tag == fmt.Sprintf(constants.ReleaseTag, F.GetVersion()) {
-		return analyzeCommits(tag)
-	} else if tag == fmt.Sprintf(constants.VersionTag, F.GetVersion()) {
-		return analyzeAndCompareCommits(tag, fmt.Sprintf(constants.ReleaseTag, F.GetLastVersion()))
-	} else if tag == "" {
-		return analyzeCommits(tag)
-	} else {
-		return nil, fmt.Errorf(ErrNoVersionBump)
-	}
-}
-
-func analyzeCommits(tag string) (func() error, error) {
-	logf(LogAnalyzingCommits, "head", tag)
-	commits, err := G.GetCommitsBetweenTags(gitops.HEAD, tag)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	logf(LogCommitsFound, len(commits))
-
-	priority := findCommitPriority(commits)
-	logf(MsgBumpPrioritySet, priority)
-	switch priority {
-	case PriorityBreakingChange:
-		return F.BumpMajor, nil
-	case PriorityFeat:
-		return F.BumpMinor, nil
-	case PriorityFix:
-		return F.BumpPatch, nil
-	default:
-		return nil, fmt.Errorf(ErrBumpMethodDetection)
-	}
-}
-
-func analyzeAndCompareCommits(starttag, endtag string) (func() error, error) {
-	logf(LogAnalyzingCommits, starttag, endtag)
-	oldCommits, err := G.GetCommitsBetweenTags(starttag, endtag)
-	if err != nil {
-		log.Fatal(err)
-	}
-	logf(LogCommitsFound, len(oldCommits))
-
-	logf(LogAnalyzingCommits, "head", starttag)
-	newCommits, err := G.GetCommitsBetweenTags(gitops.HEAD, starttag)
-	if err != nil {
-		log.Fatal(err)
-	}
-	logf(LogCommitsFound, len(newCommits))
-
-	priority := comparePriority(findCommitPriority(oldCommits), findCommitPriority(newCommits))
-	logf(MsgBumpPrioritySet, priority)
-	switch priority {
-	case PriorityBreakingChange:
-		return F.BumpMajor, nil
-	case PriorityFeat:
-		return F.BumpMinor, nil
-	case PriorityFix:
-		return F.BumpPatch, nil
-	default:
-		return nil, fmt.Errorf(ErrNoVersionBump)
-	}
-}
-
-func comparePriority(first, second int) int {
-	if second > first {
-		return second
-	}
-	return 0
-}
-
-func detectCommitBump() (func() error, error) {
-	commit, err := G.GetHeadCommit()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if strings.Contains(commit.Message, "[bump]") {
-		return detectAutoBump()
-	} else if strings.Contains(commit.Message, "[bump major]") {
-		return F.BumpMajor, nil
-	} else if strings.Contains(commit.Message, "[bump minor]") {
-		return F.BumpMinor, nil
-	} else if strings.Contains(commit.Message, "[bump patch]") {
-		return F.BumpPatch, nil
-	}
-
-	return nil, fmt.Errorf(ErrNoBumpCommandFound)
-}
-
-func executeGitOperations() {
-	if tagFlag || pushFlag {
-
-		if _, err := G.AddAll(); err != nil {
-			log.Fatal(ErrGitOperationFailed, err)
+		if commitFlag {
+			err := v.Commit(amendFlag)
+			if err != nil {
+				log.Printf(ErrGitCommitFailed, err)
+			}
 		}
 
-		if err := G.Commit(fmt.Sprintf(constants.CommitMessage, F.GetLastVersion(), F.GetVersion()), amendFlag); err != nil {
-			log.Fatal(ErrGitOperationFailed, err)
+		if tagFlag {
+			err := v.Tag()
+			if err != nil {
+				log.Printf(ErrGitTagFailed, err)
+			}
 		}
 
-		if err := G.CreateTag(fmt.Sprintf(constants.VersionTag, F.GetVersion()), constants.TagMessage); err != nil {
-			log.Fatal(ErrGitOperationFailed, err)
-		}
-	}
-
-	if pushFlag {
-		if err := G.Push(); err != nil {
-			log.Fatal(ErrGitOperationFailed, err)
-		}
-	}
-}
-
-func findCommitPriority(commits []*object.Commit) int {
-	highestPriority := PriorityNone
-
-	for _, commit := range commits {
-		message := commit.Message
-
-		if strings.Contains(message, "BREAKING CHANGE:") {
-			logf(MsgBreakingChangeDetected, commit.Hash)
-			return PriorityBreakingChange
-		} else if strings.Contains(message, "feat:") && highestPriority < PriorityFeat {
-			logf(MsgFeatureDetected, commit.Hash)
-			highestPriority = PriorityFeat
-		} else if strings.Contains(message, "fix:") && highestPriority < PriorityFix {
-			logf(MsgFixDetected, commit.Hash)
-			highestPriority = PriorityFix
+		if pushFlag {
+			err := v.Push()
+			if err != nil {
+				log.Printf(ErrGitPushFailed, err)
+			}
 		}
 	}
-
-	return highestPriority
 }

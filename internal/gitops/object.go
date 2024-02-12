@@ -1,9 +1,27 @@
 package gitops
 
-import "github.com/go-git/go-git/v5"
+import (
+	"github.com/go-git/go-git/v5"
+)
 
-type GitObject struct{}
+type GitRepositoryOpener struct {
+	path string
+}
 
-func (o *GitObject) Open(path string) (*git.Repository, error) {
-	return git.PlainOpen(path)
+func (o GitRepositoryOpener) SetPath(path string) {
+	o.path = path
+}
+
+func (o GitRepositoryOpener) Open(vcs IVcs) error {
+	repository, err := git.PlainOpen(o.path)
+	if err != nil {
+		return err
+	}
+	if g, ok := vcs.(GitImpl); ok {
+		g.repository = repository
+		return nil
+	}
+
+	return nil
+
 }

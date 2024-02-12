@@ -6,88 +6,49 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"gitver/internal/constants"
 	"sort"
 	"time"
 )
 
-type IGitOps interface {
-	SetRepositoryPath(path string)
-	SetObject(object Object)
-	SetWorktree(w *git.Worktree)
-	SetRepository(r *git.Repository)
+type IVcs interface {
+	SetRepositoryOpener(object IRepositoryOpener)
 	ReadRepository() error
-	GetStatus() (git.Status, error)
 	IsCleanRepo() (bool, error)
-	AddAll() (plumbing.Hash, error)
+	AddAll() error
 	Commit(message string, amend bool) error
 	CreateTag(tag string, message string) error
 	GetLatestTag() (string, error)
+	GetHeadCommit() (string, error)
 	Push() error
-	GetHeadCommit() (*object.Commit, error)
-	GetTag(tag string) (plumbing.Hash, error)
-	GetCommitsBetweenTags(startTag, endTag string) ([]*object.Commit, error)
-
-	GetPath() string
+	GetCommitsMessagesFromTagToHead(tag string) ([]string, error)
 	GetName() string
 	GetEmail() string
-	GetRepository() *git.Repository
-	GetWorktree() *git.Worktree
-	GetObject() Object
-	GetCommitMessage() string
-	GetTagMessage() string
 }
 
-const (
-	EMPTY = ""
-	HEAD  = ""
-	INIT  = ""
-)
+var g IVcs
 
-var g IGitOps
-
-type GitOps struct {
-	path          string
-	name          string
-	email         string
-	repository    *git.Repository
-	worktree      *git.Worktree
-	object        Object
-	commitMessage string
-	tagMessage    string
+type GitImpl struct {
+	name             string
+	email            string
+	repository       *git.Repository
+	repositoryOpener IRepositoryOpener
 }
-
-// Private Functions
 
 func init() {
 	g = build()
 }
-
-func (g *GitOps) SetRepositoryPath(path string) {
-	g.path = path
+func (g GitImpl) SetRepositoryOpener(repositoryOpener IRepositoryOpener) {
+	g.repositoryOpener = repositoryOpener
 }
+func (g GitImpl) ReadRepository() error {
 
-func (g *GitOps) SetObject(object Object) {
-	g.object = object
-}
-
-func (g *GitOps) SetWorktree(w *git.Worktree) {
-	g.worktree = w
-}
-
-func (g *GitOps) SetRepository(r *git.Repository) {
-	g.repository = r
-}
-
-func (g *GitOps) ReadRepository() error {
-
-	r, err := g.object.Open(g.path)
+	err := g.repositoryOpener.Open(g)
 	if err != nil {
 		// RepositoryNotExists
 		return err
 	}
 
-	cfg, err := r.ConfigScoped(config.GlobalScope)
+	cfg, err := g.repository.ConfigScoped(config.GlobalScope)
 	if err != nil {
 		return err
 	}
@@ -97,33 +58,37 @@ func (g *GitOps) ReadRepository() error {
 		return nil
 	}
 
-	w, err := r.Worktree()
-	if err != nil {
-		return err
-	}
-
 	g.name = user.Name
 	g.email = user.Email
-	g.repository = r
-	g.worktree = w
 
 	return nil
 }
-
-func (g *GitOps) GetStatus() (git.Status, error) {
-	return g.worktree.Status()
+func (g GitImpl) GetStatus() (git.Status, error) {
+	w, err := g.repository.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	return w.Status()
 }
-func (g *GitOps) IsCleanRepo() (bool, error) {
+func (g GitImpl) IsCleanRepo() (bool, error) {
 	status, err := g.GetStatus()
 	if err != nil {
 		return false, err
 	}
 	return status.IsClean(), nil
 }
-func (g *GitOps) AddAll() (plumbing.Hash, error) {
-	return g.worktree.Add(".")
+func (g GitImpl) AddAll() error {
+	w, err := g.repository.Worktree()
+	if err != nil {
+		return err
+	}
+	_, err = w.Add(".")
+	if err != nil {
+		return err
+	}
+	return nil
 }
-func (g *GitOps) Commit(message string, amend bool) error {
+func (g GitImpl) Commit(message string, amend bool) error {
 	commitOptions := &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  g.name,
@@ -133,22 +98,18 @@ func (g *GitOps) Commit(message string, amend bool) error {
 		Amend: amend,
 	}
 
-	if amend {
-		commit, err := g.GetHeadCommit()
-		if err != nil {
-			return err
-		}
-		message = commit.Message
+	w, err := g.repository.Worktree()
+	if err != nil {
+		return err
 	}
 
-	_, err := g.worktree.Commit(message, commitOptions)
-
+	_, err = w.Commit(message, commitOptions)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (g *GitOps) CreateTag(tag string, message string) error {
+func (g GitImpl) CreateTag(tag string, message string) error {
 
 	headRef, err := g.repository.Head()
 	if err != nil {
@@ -175,7 +136,7 @@ func (g *GitOps) CreateTag(tag string, message string) error {
 
 	return nil
 }
-func (g *GitOps) GetLatestTag() (string, error) {
+func (g GitImpl) GetLatestTag() (string, error) {
 
 	tagRefs, err := g.repository.Tags()
 	if err != nil {
@@ -222,7 +183,7 @@ func (g *GitOps) GetLatestTag() (string, error) {
 
 	return "", nil
 }
-func (g *GitOps) Push() error {
+func (g GitImpl) Push() error {
 
 	// HEAD-Referenz holen
 	headRef, err := g.repository.Head()
@@ -246,10 +207,10 @@ func (g *GitOps) Push() error {
 
 	return nil
 }
-func (g *GitOps) GetHeadCommit() (*object.Commit, error) {
+func (g GitImpl) GetHeadCommit() (string, error) {
 	headRef, err := g.repository.Head()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	commit, err := g.repository.CommitObject(headRef.Hash())
@@ -257,9 +218,9 @@ func (g *GitOps) GetHeadCommit() (*object.Commit, error) {
 
 	}
 
-	return commit, nil
+	return commit.Message, nil
 }
-func (g *GitOps) GetTag(tag string) (plumbing.Hash, error) {
+func (g GitImpl) GetTag(tag string) (plumbing.Hash, error) {
 	tagRef, err := g.repository.Tag(tag)
 	if err == nil {
 		// Dereferenziert das Tag-Objekt, falls es ein annotiertes Tag ist
@@ -273,18 +234,15 @@ func (g *GitOps) GetTag(tag string) (plumbing.Hash, error) {
 	}
 	return plumbing.Hash{}, nil
 }
-func (g *GitOps) GetCommitsBetweenTags(startTag, endTag string) ([]*object.Commit, error) {
+func (g GitImpl) GetCommitsMessagesFromTagToHead(tag string) ([]string, error) {
 
-	startHash, err := g.GetTag(startTag)
+	headRef, err := g.repository.Head()
 	if err != nil {
-		headRef, err := g.repository.Head()
-		if err != nil {
-			return nil, err
-		}
-		startHash = headRef.Hash()
+		return nil, err
 	}
+	startHash := headRef.Hash()
 
-	endHash, _ := g.GetTag(endTag)
+	endHash, _ := g.GetTag(tag)
 	if err != nil {
 		endHash = plumbing.Hash{}
 	}
@@ -295,9 +253,9 @@ func (g *GitOps) GetCommitsBetweenTags(startTag, endTag string) ([]*object.Commi
 		return nil, err
 	}
 
-	var commits []*object.Commit
+	var commitMessages []string
 	err = commitIter.ForEach(func(c *object.Commit) error {
-		commits = append(commits, c)
+		commitMessages = append(commitMessages, c.Message)
 		if c.Hash == endHash {
 			return fmt.Errorf("BREAK")
 		}
@@ -308,42 +266,18 @@ func (g *GitOps) GetCommitsBetweenTags(startTag, endTag string) ([]*object.Commi
 		return nil, err
 	}
 
-	return commits, nil
+	return commitMessages, nil
 }
-
-func (g *GitOps) GetPath() string {
-	return g.path
-}
-func (g *GitOps) GetName() string {
+func (g GitImpl) GetName() string {
 	return g.name
 }
-func (g *GitOps) GetEmail() string {
+func (g GitImpl) GetEmail() string {
 	return g.email
 }
-func (g *GitOps) GetRepository() *git.Repository {
-	return g.repository
-}
-func (g *GitOps) GetWorktree() *git.Worktree {
-	return g.worktree
-}
-func (g *GitOps) GetObject() Object {
-	return g.object
-}
-func (g *GitOps) GetCommitMessage() string {
-	return g.commitMessage
-}
-func (g *GitOps) GetTagMessage() string {
-	return g.tagMessage
-}
-
-// Public Functions
-
-func Get() IGitOps {
+func Get() IVcs {
 	return g
 }
-func build() IGitOps {
-	g := new(GitOps)
-	g.commitMessage = constants.CommitMessage
-	g.tagMessage = constants.TagMessage
+func build() IVcs {
+	g := new(GitImpl)
 	return g
 }

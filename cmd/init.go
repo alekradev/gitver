@@ -2,7 +2,20 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"gitver/internal/version"
 	"log"
+)
+
+const (
+	MsgProjectInitialized = "gitver initialized for the project."
+	DescInitCommand       = "init"
+	DescInitCommandShort  = "FIND DESCRIPTION"
+	DescInitCommandLong   = "FIND DESCRIPTION"
+
+	DescVersionFlag = "overrides the default initial version. Default is 0.0.0"
+	NameVersionFlag = "version"
+
+	ErrInitWriteFile = "error by write %s. causes: %s"
 )
 
 var (
@@ -14,31 +27,21 @@ var initCmd = &cobra.Command{
 	Use:   DescInitCommand,
 	Short: DescInitCommandShort,
 	Long:  DescInitCommandLong,
-	Run:   executeInitCmd,
+	Run:   runInitCmd,
 }
 
 func init() {
 	configCmd.AddCommand(initCmd)
-	initCmd.Flags().StringVarP(&versionFlag, "version", "V", "0.0.1", "overrides the default initial version")
+	initCmd.Flags().StringVar(&versionFlag, NameVersionFlag, "0.0.0", DescVersionFlag)
 }
 
-func executeInitCmd(cmd *cobra.Command, args []string) {
-	err := F.SetDefaultVersion(versionFlag)
+func runInitCmd(cmd *cobra.Command, args []string) {
+	var v = version.Get()
+
+	err := v.SafeWriteFile()
 	if err != nil {
-		log.Fatalf(err.Error())
+		log.Fatalf(ErrInitWriteFile, "", err)
 	}
 
-	err = F.SafeWriteFile()
-	if err != nil {
-		log.Fatalf(err.Error())
-		return
-	}
-
-	err = V.SafeWriteConfig()
-	if err != nil {
-		log.Fatalf(err.Error())
-		return
-	}
-
-	log.Println("Gitver initialized for the project.")
+	log.Println(MsgProjectInitialized)
 }

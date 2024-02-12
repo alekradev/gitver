@@ -10,6 +10,7 @@ const (
 	projectDirectoryNotFoundErrorCode
 	inputValueErrorCode
 	writeOperationFailedErrorCode
+	directoryNotFoundErrorCode
 )
 
 type UnhandledError string
@@ -55,4 +56,10 @@ type WriteOperationFailedError struct {
 
 func (p WriteOperationFailedError) Error() string {
 	return fmt.Sprintf("error code: %d - Project Directory not Found %q %q", writeOperationFailedErrorCode, p.file, p.error)
+}
+
+type DirectoryNotFoundError string
+
+func (p DirectoryNotFoundError) Error() string {
+	return fmt.Sprintf("error code: %d - Project Directory not Found %q", directoryNotFoundErrorCode, string(p))
 }
